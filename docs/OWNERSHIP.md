@@ -5,7 +5,7 @@ One owner per file. Do not edit someone else's file without telling them.
 | Area | Files | Owner |
 |---|---|---|
 | Skeleton, config, deployment | `app/main.py`, `app/core/`, `Dockerfile`, `README.md` | Rick |
-| Auth, RBAC, ownership checks | `app/api/routers/auth.py`, `app/api/deps.py`, `app/core/security.py` | Rick |
+| Auth, RBAC, ownership checks | `routers/auth.py`, `routers/admin.py`, `app/api/deps.py`, `app/core/security.py`, `app/core/audit.py`, `app/core/rate_limit.py`, `app/db/create_admin.py` | Rick |
 | Models, migrations, seed data | `app/models/`, `alembic/`, `app/db/seed.py` | Sakeenah |
 | Customer insights | `app/services/insights_service.py`, insights route in `app/api/routers/ai.py` | Sakeenah |
 | Accounts, transactions, transfers | `routers/accounts.py`, `transactions.py`, `transfers.py`, matching services and schemas | Banasco |
