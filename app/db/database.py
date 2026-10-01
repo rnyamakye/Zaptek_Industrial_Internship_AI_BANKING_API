@@ -7,9 +7,16 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./banking.db")
 
-# Render gives "postgres://..." but SQLAlchemy 2.x only accepts "postgresql://"
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+def normalize_database_url(url: str) -> str:
+    """Render gives "postgres://..." (or "postgresql://..."). Always use the psycopg2 driver
+    explicitly: newer SQLAlchemy (2.1+) defaults to psycopg v3, which is not installed."""
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg2://" + url[len(prefix):]
+    return url
+
+
+DATABASE_URL = normalize_database_url(DATABASE_URL)
 
 IS_SQLITE = DATABASE_URL.startswith("sqlite")
 

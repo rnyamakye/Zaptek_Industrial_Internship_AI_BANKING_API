@@ -238,3 +238,23 @@ def test_login_rate_limit_returns_429(client, make_user):
         limiter.enabled = False
         limiter.reset()
     assert codes[0] == 401 and 429 in codes
+
+
+# ---------- database URL handling ----------
+
+@pytest.mark.parametrize(
+    "given",
+    ["postgres://u:p@host/db", "postgresql://u:p@host/db"],
+)
+def test_postgres_urls_use_psycopg2_driver(given):
+    """Regression: SQLAlchemy 2.1 defaults postgresql:// to psycopg v3, which is not installed."""
+    from app.db.database import normalize_database_url
+
+    assert normalize_database_url(given) == "postgresql+psycopg2://u:p@host/db"
+
+
+def test_other_database_urls_unchanged():
+    from app.db.database import normalize_database_url
+
+    assert normalize_database_url("sqlite:///./banking.db") == "sqlite:///./banking.db"
+    assert normalize_database_url("postgresql+psycopg2://u:p@h/d") == "postgresql+psycopg2://u:p@h/d"

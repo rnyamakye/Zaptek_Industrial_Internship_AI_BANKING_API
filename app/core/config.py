@@ -4,7 +4,7 @@ from functools import lru_cache
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-DEFAULT_SECRET = "change-me-in-real-env"
+DEFAULT_SECRET = "dev-only-insecure-secret-change-me-in-real-env"
 
 
 class Settings(BaseSettings):
