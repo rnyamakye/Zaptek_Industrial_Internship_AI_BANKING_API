@@ -33,7 +33,13 @@ from app.api.deps import CurrentUser, ensure_customer_access, is_staff, not_foun
 from app.db.database import get_db
 from app.models.account import Account
 from app.models.transaction import Transaction
-from app.schemas.transaction import TransactionCreate, TransactionResponse
+from app.models.enums import TransactionType
+from app.services.transaction_service import DuplicateReferenceError
+from app.schemas.transaction import (
+    TransactionCreate,
+    TransactionResponse,
+    TransactionWithRiskResponse,
+)
 from app.services.transaction_service import (
     create_transaction,
     get_transaction,
@@ -46,8 +52,14 @@ router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
 @router.post(
     "",
-    response_model=TransactionResponse,
+    response_model=TransactionWithRiskResponse,
     status_code=status.HTTP_201_CREATED,
+    summary="Create a transaction (runs AI risk assessment)",
+    responses={
+        400: {"description": "Insufficient balance, inactive account, currency mismatch..."},
+        409: {"description": "Reference already used"},
+        403: {"description": "Customers cannot post deposits/credits (staff only)"},
+    },
 )
 def create_transaction_endpoint(
     data: TransactionCreate,
@@ -61,9 +73,26 @@ def create_transaction_endpoint(
 
     ensure_customer_access(user, account.customer_id)
 
+    # Money coming IN is posted by staff (cash/cheque/bank deposit). Customers move money OUT.
+    if data.transaction_type in (TransactionType.DEPOSIT, TransactionType.CREDIT) and not is_staff(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only staff can post deposits or credits",
+        )
+
     try:
-        transaction, _risk_result = create_transaction(db, data)
-        return transaction
+        transaction, risk_result = create_transaction(db, data)
+        return {
+            **TransactionResponse.model_validate(transaction).model_dump(),
+            "risk": {
+                "transaction_id": transaction.id,
+                "risk_score": risk_result.risk_score,
+                "risk_level": risk_result.risk_level,
+                "model_version": risk_result.model_version,
+            },
+        }
+    except DuplicateReferenceError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

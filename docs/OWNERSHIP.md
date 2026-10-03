@@ -22,3 +22,8 @@ Shared files that need a heads-up before changing: `app/main.py`, `app/db/databa
 - PRs into `main`, Rick reviews before merge
 - Small PRs, merged often
 - Never commit `.env` or secrets
+
+
+## Final-push notes
+The accounts/transactions/transfers code (Banasco) and the beneficiaries/loans code (Reginald) was reviewed, hardened
+and extended in the final push; the changes are listed in `docs/CHANGES_IN_FINAL_PUSH.md`.

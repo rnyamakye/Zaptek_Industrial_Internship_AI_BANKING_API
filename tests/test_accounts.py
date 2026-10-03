@@ -283,7 +283,7 @@ def test_unknown_account_returns_404(
 # ---------- update ----------
 
 
-def test_customer_can_update_own_account_status(
+def test_customer_can_close_own_empty_account(
     client,
     make_user,
     auth_headers,
@@ -295,12 +295,12 @@ def test_customer_can_update_own_account_status(
 
     response = client.patch(
         f"/accounts/{account_id}",
-        json={"status": "FROZEN"},
+        json={"status": "CLOSED"},
         headers=auth_headers(customer),
     )
 
     assert response.status_code == 200
-    assert response.json()["status"] == "FROZEN"
+    assert response.json()["status"] == "CLOSED"
 
 
 def test_customer_cannot_update_another_customers_account(

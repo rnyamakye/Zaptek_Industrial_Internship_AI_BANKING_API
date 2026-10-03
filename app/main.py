@@ -4,7 +4,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.api.routers import accounts, admin, ai, auth, beneficiaries, loans, transactions, transfers
+from app.api.routers import (
+    accounts,
+    admin,
+    ai,
+    auth,
+    beneficiaries,
+    cards,
+    loans,
+    notifications,
+    transactions,
+    transfers,
+)
 from app.core.config import get_settings
 from app.core.logging_config import setup_logging
 from app.core.rate_limit import limiter
@@ -30,7 +41,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for r in (auth, admin, accounts, transactions, transfers, beneficiaries, loans, ai):
+for r in (auth, admin, accounts, transactions, transfers, beneficiaries, loans, cards, notifications, ai):
     app.include_router(r.router)
 
 

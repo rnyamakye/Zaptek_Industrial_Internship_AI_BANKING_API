@@ -11,7 +11,8 @@ from sqlalchemy.orm import Session
 from app.api.deps import CurrentUser, ensure_customer_access, not_found
 from app.db.database import get_db
 from app.models.account import Account
-from app.schemas.transfer import TransferCreate, TransferResponse
+from app.services.transaction_service import DuplicateReferenceError
+from app.schemas.transfer import TransferCreate, TransferResponse, TransferWithRiskResponse
 from app.services.transfer_service import (
     create_transfer,
     get_transfer,
@@ -23,8 +24,13 @@ router = APIRouter(prefix="/transfers", tags=["Transfers"])
 
 @router.post(
     "",
-    response_model=TransferResponse,
+    response_model=TransferWithRiskResponse,
     status_code=status.HTTP_201_CREATED,
+    summary="Create a transfer to a saved beneficiary (runs AI risk assessment)",
+    responses={
+        400: {"description": "Insufficient balance, inactive account, unknown beneficiary..."},
+        409: {"description": "Reference already used"},
+    },
 )
 def create_transfer_endpoint(
     data: TransferCreate,
@@ -39,7 +45,17 @@ def create_transfer_endpoint(
     ensure_customer_access(user, account.customer_id)
 
     try:
-        return create_transfer(db, data)
+        transfer, risk_result = create_transfer(db, data)
+        return {
+            **TransferResponse.model_validate(transfer).model_dump(),
+            "risk": {
+                "risk_score": risk_result.risk_score,
+                "risk_level": risk_result.risk_level,
+                "model_version": risk_result.model_version,
+            },
+        }
+    except DuplicateReferenceError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

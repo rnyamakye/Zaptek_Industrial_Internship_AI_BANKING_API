@@ -33,3 +33,9 @@ class TransactionRiskResponse(BaseModel):
     risk_score: float
     risk_level: str
     model_version: str
+
+
+class TransactionWithRiskResponse(TransactionResponse):
+    """Returned by POST /transactions: the banking record plus the AI assessment (model output)."""
+
+    risk: TransactionRiskResponse

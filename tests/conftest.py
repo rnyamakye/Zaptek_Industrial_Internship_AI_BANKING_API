@@ -97,3 +97,28 @@ def auth_headers():
         return {"Authorization": f"Bearer {create_access_token(user.id, user.role.value)}"}
 
     return _headers
+
+
+@pytest.fixture()
+def make_account(db):
+    """make_account(user, balance="100.00", status=ACTIVE) -> Account owned by that customer."""
+    from decimal import Decimal
+
+    from app.models import Account
+    from app.models.enums import AccountStatus, AccountType
+
+    def _make(user, balance="100.00", status=AccountStatus.ACTIVE):
+        n = db.query(Account).count() + 1
+        account = Account(
+            customer_id=user.profile.id,
+            account_number=f"55{n:08d}",
+            account_type=AccountType.SAVINGS,
+            balance=Decimal(balance),
+            status=status,
+        )
+        db.add(account)
+        db.commit()
+        db.refresh(account)
+        return account
+
+    return _make
