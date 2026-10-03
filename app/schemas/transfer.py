@@ -24,3 +24,15 @@ class TransferResponse(BaseModel):
     reference: str
     status: TransferStatus
     created_at: datetime
+
+
+class TransferRisk(BaseModel):
+    risk_score: float
+    risk_level: str
+    model_version: str
+
+
+class TransferWithRiskResponse(TransferResponse):
+    """Returned by POST /transfers: the banking record plus the AI assessment (model output)."""
+
+    risk: TransferRisk

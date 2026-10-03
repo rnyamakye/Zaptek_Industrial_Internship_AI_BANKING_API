@@ -2,20 +2,31 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.models.account import Account
+from app.models.risk_assessment import RiskAssessment
 from app.models.transaction import Transaction
 from app.models.enums import (
     AccountStatus,
+    NotificationType,
+    RiskLevel,
     TransactionStatus,
     TransactionType,
 )
 from app.schemas.transaction import TransactionCreate
-from app.services.ai_risk_service import AIRiskService
+from app.services.ai_risk_service import AIRiskService, load_model
+from app.services.notification_service import notify
 
 
-risk_service = AIRiskService()
+# Loads the trained model from RISK_MODEL_PATH if the file exists, otherwise the rule-based placeholder.
+risk_service = AIRiskService(load_model(get_settings().risk_model_path))
+
+
+class DuplicateReferenceError(ValueError):
+    """The reference was already used (references are unique). Routers answer 409."""
 
 
 CREDIT_TYPES = {
@@ -51,6 +62,9 @@ def create_transaction(
 
         if account.status != AccountStatus.ACTIVE:
             raise ValueError("Account is not active")
+
+        if db.scalar(select(Transaction.id).where(Transaction.reference == data.reference)) is not None:
+            raise DuplicateReferenceError("Reference already used")
 
         if account.currency.upper() != data.currency.upper():
             raise ValueError("Transaction currency does not match account currency")
@@ -123,13 +137,39 @@ def create_transaction(
         )
 
         db.add(transaction)
+        db.flush()  # assigns transaction.id so the risk assessment can reference it
 
-        # One commit = atomic balance + transaction update.
+        # Persist the AI risk assessment (model output, kept separate from the banking record).
+        db.add(
+            RiskAssessment(
+                customer_id=account.customer_id,
+                transaction_id=transaction.id,
+                risk_score=risk_result.risk_score,
+                risk_level=RiskLevel(risk_result.risk_level),
+                model_version=risk_result.model_version,
+            )
+        )
+
+        if transaction_status == TransactionStatus.FLAGGED:
+            notify(
+                db,
+                account.customer.user_id,
+                NotificationType.SECURITY,
+                "Transaction flagged for review",
+                f"A {data.transaction_type.value.lower()} of {amount} {data.currency.upper()} "
+                f"(ref {data.reference}) was flagged as high risk and is awaiting staff review.",
+            )
+
+        # One commit = atomic balance + transaction + risk assessment (+ notification).
         db.commit()
         db.refresh(transaction)
 
         return transaction, risk_result
 
+    except IntegrityError as exc:
+        # Two requests with the same reference at the same moment: the database constraint wins.
+        db.rollback()
+        raise DuplicateReferenceError("Reference already used") from exc
     except Exception:
         db.rollback()
         raise

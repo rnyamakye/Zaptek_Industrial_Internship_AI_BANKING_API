@@ -1,10 +1,11 @@
 """Accounts API router. Owner: Banasco."""
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser, ensure_customer_access, is_staff, not_found
 from app.db.database import get_db
+from app.models.enums import AccountStatus
 from app.schemas.account import AccountCreate, AccountResponse, AccountUpdate
 from app.services.account_service import (
     create_account,
@@ -87,5 +88,21 @@ def update_account_by_id(
         raise not_found()
 
     ensure_customer_access(user, account.customer_id)
+
+    if not is_staff(user):
+        # Customers can only close their own account (and only when empty).
+        # Freezing/unfreezing is a staff decision, otherwise a customer could unfreeze
+        # an account that staff froze.
+        if data.status != AccountStatus.CLOSED:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Customers can only close their account; ask staff to change other statuses",
+            )
+        if account.status == AccountStatus.CLOSED:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Account is already closed")
+        if account.status == AccountStatus.FROZEN:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is frozen; contact staff")
+        if account.balance != 0:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Withdraw the remaining balance before closing")
 
     return update_account(db, account, data)

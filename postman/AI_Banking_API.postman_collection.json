@@ -1,0 +1,3038 @@
+{
+  "info": {
+    "_postman_id": "9b51eb29-f46a-454a-b4f7-1b9edd6c91d3",
+    "name": "AI-Powered Banking API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Major workflows of the AI Banking API: auth, accounts, transactions with AI risk, beneficiaries, transfers, loans, cards, notifications, AI endpoints, admin.\n\nSETUP: create the first admin once with `python -m app.db.create_admin <email> <password>`, then set the collection variables `adminEmail` and `adminPassword`. Set `baseUrl` to your server (local or Render). Run the whole collection top to bottom (Collection Runner; the first request generates fresh test users on every run): it registers fresh users every run and saves tokens/ids into variables automatically."
+  },
+  "item": [
+    {
+      "name": "0. Health & setup",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{ // fresh users and references on every run (this request is first in the run)",
+                  "  const id = Date.now().toString();",
+                  "  pm.collectionVariables.set(\"runId\", id);",
+                  "  const ph = (n) => \"02\" + (id + n).slice(-8);",
+                  "  pm.collectionVariables.set(\"custaEmail\", \"cust.a.\" + id + \"@example.com\");",
+                  "  pm.collectionVariables.set(\"custbEmail\", \"cust.b.\" + id + \"@example.com\");",
+                  "  pm.collectionVariables.set(\"staffEmail\", \"staff.\" + id + \"@example.com\");",
+                  "  pm.collectionVariables.set(\"custaPhone\", ph(\"1\")); pm.collectionVariables.set(\"custbPhone\", ph(\"2\")); pm.collectionVariables.set(\"staffPhone\", ph(\"3\"));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"healthy\", function () { pm.expect(j.status).to.eql(\"healthy\"); pm.expect(j.service).to.eql(\"ai-banking-api\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1. Auth",
+      "item": [
+        {
+          "name": "Register customer A",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"CustA Tester\",\n  \"email\": \"{{custaEmail}}\",\n  \"phone\": \"{{custaPhone}}\",\n  \"password\": \"{{password}}\",\n  \"date_of_birth\": \"1995-04-01\",\n  \"address\": \"12 Ring Road, Accra\",\n  \"occupation\": \"Teacher\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", function () { pm.response.to.have.status(201); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"role is CUSTOMER, no password hash\", function () { pm.expect(j.role).to.eql(\"CUSTOMER\"); pm.expect(j).to.not.have.property(\"password_hash\"); });",
+                  "pm.collectionVariables.set(\"custaUserId\", j.id);",
+                  "pm.collectionVariables.set(\"custaProfileId\", j.profile.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register customer B",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"CustB Tester\",\n  \"email\": \"{{custbEmail}}\",\n  \"phone\": \"{{custbPhone}}\",\n  \"password\": \"{{password}}\",\n  \"date_of_birth\": \"1995-04-01\",\n  \"address\": \"12 Ring Road, Accra\",\n  \"occupation\": \"Teacher\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", function () { pm.response.to.have.status(201); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"role is CUSTOMER, no password hash\", function () { pm.expect(j.role).to.eql(\"CUSTOMER\"); pm.expect(j).to.not.have.property(\"password_hash\"); });",
+                  "pm.collectionVariables.set(\"custbUserId\", j.id);",
+                  "pm.collectionVariables.set(\"custbProfileId\", j.profile.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register: duplicate email -> 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Dup Tester\",\n  \"email\": \"{{custaEmail}}\",\n  \"phone\": \"0249999999\",\n  \"password\": \"{{password}}\",\n  \"date_of_birth\": \"1995-04-01\",\n  \"address\": \"Accra\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 409\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register: under 18 -> 422",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Kid Tester\",\n  \"email\": \"kid@example.com\",\n  \"phone\": \"0248888888\",\n  \"password\": \"{{password}}\",\n  \"date_of_birth\": \"2015-01-01\",\n  \"address\": \"Accra\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 422\", function () { pm.response.to.have.status(422); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login customer A",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "username",
+                  "value": "{{custaEmail}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{password}}"
+                }
+              ]
+            },
+            "description": "Form fields: username = email, password."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"returns access + refresh token\", function () { pm.expect(j.access_token).to.be.a(\"string\"); pm.expect(j.refresh_token).to.be.a(\"string\"); });",
+                  "pm.collectionVariables.set(\"tokenA\", j.access_token);",
+                  "pm.collectionVariables.set(\"refreshA\", j.refresh_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login customer B",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "username",
+                  "value": "{{custbEmail}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{password}}"
+                }
+              ]
+            },
+            "description": "Form fields: username = email, password."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"returns access + refresh token\", function () { pm.expect(j.access_token).to.be.a(\"string\"); pm.expect(j.refresh_token).to.be.a(\"string\"); });",
+                  "pm.collectionVariables.set(\"tokenB\", j.access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login: wrong password -> 401",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "username",
+                  "value": "{{custaEmail}}"
+                },
+                {
+                  "key": "password",
+                  "value": "WrongPass1"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 401\", function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Me (customer A)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"has profile\", function () { pm.expect(j.profile).to.be.an(\"object\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "refresh"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refreshA}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.collectionVariables.set(\"tokenA\", j.access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Me without token -> 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 401\", function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login ADMIN (created with create_admin)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "username",
+                  "value": "{{adminEmail}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}"
+                }
+              ]
+            },
+            "description": "Form fields: username = email, password."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"returns access + refresh token\", function () { pm.expect(j.access_token).to.be.a(\"string\"); pm.expect(j.refresh_token).to.be.a(\"string\"); });",
+                  "pm.collectionVariables.set(\"adminToken\", j.access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register staff candidate",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Staff Tester\",\n  \"email\": \"{{staffEmail}}\",\n  \"phone\": \"{{staffPhone}}\",\n  \"password\": \"{{password}}\",\n  \"date_of_birth\": \"1995-04-01\",\n  \"address\": \"12 Ring Road, Accra\",\n  \"occupation\": \"Teacher\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", function () { pm.response.to.have.status(201); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"role is CUSTOMER, no password hash\", function () { pm.expect(j.role).to.eql(\"CUSTOMER\"); pm.expect(j).to.not.have.property(\"password_hash\"); });",
+                  "pm.collectionVariables.set(\"staffUserId\", j.id);",
+                  "pm.collectionVariables.set(\"staffProfileId\", j.profile.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin promotes candidate to STAFF",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/{{staffUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users",
+                "{{staffUserId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"STAFF\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"role STAFF\", function () { pm.expect(pm.response.json().role).to.eql(\"STAFF\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login staff",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "username",
+                  "value": "{{staffEmail}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{password}}"
+                }
+              ]
+            },
+            "description": "Form fields: username = email, password."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"returns access + refresh token\", function () { pm.expect(j.access_token).to.be.a(\"string\"); pm.expect(j.refresh_token).to.be.a(\"string\"); });",
+                  "pm.collectionVariables.set(\"staffToken\", j.access_token);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Accounts",
+      "item": [
+        {
+          "name": "Customer A opens account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_type\": \"SAVINGS\",\n  \"currency\": \"GHS\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", function () { pm.response.to.have.status(201); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"starts at zero\", function () { pm.expect(j.balance).to.eql(\"0.00\"); });",
+                  "pm.collectionVariables.set(\"accountA\", j.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Customer B opens account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenB}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_type\": \"CURRENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", function () { pm.response.to.have.status(201); });",
+                  "const j = pm.response.json();",
+                  "pm.collectionVariables.set(\"accountB\", j.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List my accounts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"only my accounts + total header\", function () { pm.expect(pm.response.json().length).to.eql(1); pm.expect(pm.response.headers.get(\"X-Total-Count\")).to.eql(\"1\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get my account",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/{{accountA}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                "{{accountA}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "B cannot read A's account -> 404",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenB}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/{{accountA}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                "{{accountA}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Customer cannot freeze own account -> 403",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/{{accountA}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                "{{accountA}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"FROZEN\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 403\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Transactions + AI risk",
+      "item": [
+        {
+          "name": "Customer self-deposit -> 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_id\": {{accountA}},\n  \"transaction_type\": \"DEPOSIT\",\n  \"amount\": \"1000000\",\n  \"currency\": \"GHS\",\n  \"reference\": \"{{runId}}-FREE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 403\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Staff deposits 2000.00",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_id\": {{accountA}},\n  \"transaction_type\": \"DEPOSIT\",\n  \"amount\": \"2000.00\",\n  \"currency\": \"GHS\",\n  \"reference\": \"{{runId}}-DEP1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"response carries AI risk\", function () { const r = pm.response.json().risk; pm.expect(r.risk_level).to.be.oneOf([\"LOW\",\"MEDIUM\",\"HIGH\"]); pm.expect(r.model_version).to.be.a(\"string\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Customer withdraws 150.50",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_id\": {{accountA}},\n  \"transaction_type\": \"WITHDRAWAL\",\n  \"amount\": \"150.50\",\n  \"currency\": \"GHS\",\n  \"reference\": \"{{runId}}-WD1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", function () { pm.response.to.have.status(201); });",
+                  "const j = pm.response.json();",
+                  "pm.collectionVariables.set(\"txnA\", j.id);",
+                  "pm.test(\"risk_score within 0..1\", function () { pm.expect(j.risk.risk_score).to.be.within(0, 1); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Overdraw -> 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_id\": {{accountA}},\n  \"transaction_type\": \"WITHDRAWAL\",\n  \"amount\": \"999999.00\",\n  \"currency\": \"GHS\",\n  \"reference\": \"{{runId}}-WD2\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 400\", function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Duplicate reference -> 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_id\": {{accountA}},\n  \"transaction_type\": \"WITHDRAWAL\",\n  \"amount\": \"1.00\",\n  \"currency\": \"GHS\",\n  \"reference\": \"{{runId}}-WD1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 409\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Check balance = 1849.50",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/{{accountA}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                "{{accountA}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"exact decimal balance\", function () { pm.expect(pm.response.json().balance).to.eql(\"1849.50\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List transactions of my account",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transactions?account_id={{accountA}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ],
+              "query": [
+                {
+                  "key": "account_id",
+                  "value": "{{accountA}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"2 transactions\", function () { pm.expect(pm.response.headers.get(\"X-Total-Count\")).to.eql(\"2\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get one transaction",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transactions/{{txnA}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions",
+                "{{txnA}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "B cannot read A's transaction -> 404",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenB}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transactions/{{txnA}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions",
+                "{{txnA}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Staff lists ALL transactions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Customer listing without account_id -> 404",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Beneficiaries & transfers",
+      "item": [
+        {
+          "name": "Save beneficiary",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/beneficiaries",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "beneficiaries"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Esi Asante\",\n  \"account_number\": \"0123456789\",\n  \"bank_name\": \"GCB Bank\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", function () { pm.response.to.have.status(201); });",
+                  "const j = pm.response.json();",
+                  "pm.collectionVariables.set(\"benA\", j.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Duplicate beneficiary -> 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/beneficiaries",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "beneficiaries"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Esi Asante\",\n  \"account_number\": \"0123456789\",\n  \"bank_name\": \"GCB Bank\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 409\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "B saves a beneficiary",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenB}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/beneficiaries",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "beneficiaries"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Kwame Mensah\",\n  \"account_number\": \"0987654321\",\n  \"bank_name\": \"GCB Bank\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", function () { pm.response.to.have.status(201); });",
+                  "const j = pm.response.json();",
+                  "pm.collectionVariables.set(\"benB\", j.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List my beneficiaries",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/beneficiaries",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "beneficiaries"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"only mine\", function () { pm.expect(pm.response.json().length).to.eql(1); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Transfer 200.00 to beneficiary",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transfers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transfers"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender_account_id\": {{accountA}},\n  \"beneficiary_id\": {{benA}},\n  \"amount\": \"200.00\",\n  \"reference\": \"{{runId}}-TRF1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", function () { pm.response.to.have.status(201); });",
+                  "const j = pm.response.json();",
+                  "pm.collectionVariables.set(\"transferA\", j.id);",
+                  "pm.test(\"AI risk attached\", function () { pm.expect(j.risk.risk_level).to.be.oneOf([\"LOW\",\"MEDIUM\",\"HIGH\"]); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Transfer to another customer's beneficiary -> 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transfers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transfers"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender_account_id\": {{accountA}},\n  \"beneficiary_id\": {{benB}},\n  \"amount\": \"1.00\",\n  \"reference\": \"{{runId}}-TRF2\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 400\", function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Duplicate transfer reference -> 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transfers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transfers"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender_account_id\": {{accountA}},\n  \"beneficiary_id\": {{benA}},\n  \"amount\": \"1.00\",\n  \"reference\": \"{{runId}}-TRF1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 409\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List my transfers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transfers?account_id={{accountA}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transfers"
+              ],
+              "query": [
+                {
+                  "key": "account_id",
+                  "value": "{{accountA}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get transfer",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transfers/{{transferA}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transfers",
+                "{{transferA}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "B cannot read A's transfer -> 404",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenB}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transfers/{{transferA}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transfers",
+                "{{transferA}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Remove beneficiary (soft delete, has transfers) -> 204",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/beneficiaries/{{benA}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "beneficiaries",
+                "{{benA}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Loans",
+      "item": [
+        {
+          "name": "Apply for loan (12,000 over 12 months)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/loans",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "loans"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": \"12000.00\",\n  \"duration\": 12\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", function () { pm.response.to.have.status(201); });",
+                  "const j = pm.response.json();",
+                  "pm.collectionVariables.set(\"loanA\", j.id);",
+                  "pm.test(\"PENDING, bank-set rate, monthly payment\", function () { pm.expect(j.status).to.eql(\"PENDING\"); pm.expect(j.interest_rate).to.eql(\"24.00\"); pm.expect(j.monthly_payment).to.eql(\"1134.72\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Second pending loan -> 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/loans",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "loans"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": \"500.00\",\n  \"duration\": 6\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 409\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invalid amount -> 422",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenB}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/loans",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "loans"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": \"-5\",\n  \"duration\": 6\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 422\", function () { pm.response.to.have.status(422); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List my loans",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/loans",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "loans"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get loan",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/loans/{{loanA}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "loans",
+                "{{loanA}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "B cannot read A's loan -> 404",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenB}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/loans/{{loanA}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "loans",
+                "{{loanA}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Customer cannot approve -> 403",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/loans/{{loanA}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "loans",
+                "{{loanA}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"APPROVED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 403\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Staff approves loan",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/loans/{{loanA}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "loans",
+                "{{loanA}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"APPROVED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"approved\", function () { pm.expect(pm.response.json().status).to.eql(\"APPROVED\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve again -> 400",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/loans/{{loanA}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "loans",
+                "{{loanA}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"REJECTED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 400\", function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. Cards & notifications",
+      "item": [
+        {
+          "name": "Request debit card",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cards",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cards"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"card_type\": \"DEBIT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", function () { pm.response.to.have.status(201); });",
+                  "const j = pm.response.json();",
+                  "pm.collectionVariables.set(\"cardA\", j.id);",
+                  "pm.test(\"only last 4 digits\", function () { pm.expect(j.last_four_digits).to.have.lengthOf(4); pm.expect(j).to.not.have.property(\"card_number\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Block my card",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cards/{{cardA}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cards",
+                "{{cardA}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"BLOCKED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Customer cannot unblock -> 403",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cards/{{cardA}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cards",
+                "{{cardA}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACTIVE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 403\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List my cards",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cards",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cards"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "My notifications (loan decision)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.collectionVariables.set(\"notifA\", j[0].id);",
+                  "pm.test(\"loan notifications present\", function () { const t = j.map(n => n.title); pm.expect(t).to.include(\"Loan approved\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mark notification read",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/{{notifA}}/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "{{notifA}}",
+                "read"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"read\", function () { pm.expect(pm.response.json().read).to.eql(true); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "B cannot mark A's notification -> 404",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenB}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/{{notifA}}/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "{{notifA}}",
+                "read"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "7. AI endpoints (model-generated)",
+      "item": [
+        {
+          "name": "Customer insights",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/ai/customers/{{custaProfileId}}/insights",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ai",
+                "customers",
+                "{{custaProfileId}}",
+                "insights"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"labelled as model-generated\", function () { pm.expect(j.is_model_generated).to.eql(true); pm.expect(j.generated_by).to.be.a(\"string\"); pm.expect(j.disclaimer).to.be.a(\"string\"); pm.expect(j.insights).to.be.an(\"array\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "B cannot read A's insights -> 404",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenB}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/ai/customers/{{custaProfileId}}/insights",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ai",
+                "customers",
+                "{{custaProfileId}}",
+                "insights"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Staff can read insights",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/ai/customers/{{custaProfileId}}/insights",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ai",
+                "customers",
+                "{{custaProfileId}}",
+                "insights"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Stored risk assessment of a transaction",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/ai/transactions/{{txnA}}/risk",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ai",
+                "transactions",
+                "{{txnA}}",
+                "risk"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"has model_version\", function () { pm.expect(pm.response.json().model_version).to.be.a(\"string\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Model info (staff)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/ai/model/info",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ai",
+                "model",
+                "info"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"version + thresholds\", function () { pm.expect(j.model_version).to.be.a(\"string\"); pm.expect(j.thresholds).to.have.property(\"low_max\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Model info as customer -> 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/ai/model/info",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ai",
+                "model",
+                "info"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 403\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "8. Admin & staff controls",
+      "item": [
+        {
+          "name": "Customer cannot list users -> 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 403\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Staff lists users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users?limit=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"total header\", function () { pm.expect(Number(pm.response.headers.get(\"X-Total-Count\"))).to.be.above(2); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Staff cannot change roles -> 403",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/{{custbUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users",
+                "{{custbUserId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"SUSPENDED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 403\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Staff freezes A's account",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/{{accountA}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                "{{accountA}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"FROZEN\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Frozen account cannot transact -> 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_id\": {{accountA}},\n  \"transaction_type\": \"WITHDRAWAL\",\n  \"amount\": \"1.00\",\n  \"currency\": \"GHS\",\n  \"reference\": \"{{runId}}-FZ\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 400\", function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Staff unfreezes A's account",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/{{accountA}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                "{{accountA}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACTIVE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin suspends customer B",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/{{custbUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users",
+                "{{custbUserId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"SUSPENDED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Suspended B is locked out -> 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenB}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 403\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "password",
+      "value": "Secret123"
+    },
+    {
+      "key": "adminEmail",
+      "value": "admin@example.com"
+    },
+    {
+      "key": "adminPassword",
+      "value": "AdminPass123"
+    }
+  ]
+}

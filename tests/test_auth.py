@@ -258,3 +258,16 @@ def test_other_database_urls_unchanged():
 
     assert normalize_database_url("sqlite:///./banking.db") == "sqlite:///./banking.db"
     assert normalize_database_url("postgresql+psycopg2://u:p@h/d") == "postgresql+psycopg2://u:p@h/d"
+
+
+def test_user_with_reserved_domain_email_does_not_break_responses(client, make_user, auth_headers):
+    """Regression (found on PostgreSQL): an admin created via the CLI with admin@bank.local made
+    /auth/me and /admin/users fail with a 500, because output re-validated the email."""
+    from app.models.enums import UserRole
+
+    admin = make_user(role=UserRole.ADMIN, email="admin@bank.local")
+    h = auth_headers(admin)
+    assert client.get("/auth/me", headers=h).status_code == 200
+    r = client.get("/admin/users", headers=h)
+    assert r.status_code == 200 and "admin@bank.local" in [u["email"] for u in r.json()]
+    assert login(client, "admin@bank.local").status_code == 200

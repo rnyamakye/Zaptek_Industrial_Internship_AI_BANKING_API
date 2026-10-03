@@ -64,7 +64,7 @@ class UserOut(BaseModel):
 
     id: int
     full_name: str
-    email: EmailStr
+    email: str  # plain str on output: stored data is not re-validated (EmailStr rejects e.g. admin@bank.local)
     phone: str
     role: UserRole
     status: UserStatus

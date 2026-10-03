@@ -16,6 +16,26 @@ def create_account(client, user, auth_headers, currency="GHS"):
     )
 
 
+def _teller_for(user):
+    """Deposits/credits are staff-only, so tests that need money in an account post them as staff."""
+    from sqlalchemy.orm import object_session
+
+    from app.models import User
+    from app.models.enums import UserRole, UserStatus
+
+    db = object_session(user)
+    email = f"teller{user.id}@example.com"
+    teller = db.query(User).filter(User.email == email).first()
+    if teller is None:
+        teller = User(
+            full_name="Teller", email=email, phone=f"0200{user.id:06d}",
+            password_hash="x", role=UserRole.STAFF, status=UserStatus.ACTIVE,
+        )
+        db.add(teller)
+        db.commit()
+    return teller
+
+
 def create_transaction(
     client,
     user,
@@ -26,6 +46,8 @@ def create_transaction(
     currency="GHS",
     reference="TXN-001",
 ):
+    if transaction_type in ("DEPOSIT", "CREDIT") and user.role.value == "CUSTOMER":
+        user = _teller_for(user)
     return client.post(
         "/transactions",
         json={
@@ -60,7 +82,7 @@ def test_transactions_require_login(client):
 # ---------- create ----------
 
 
-def test_customer_can_create_transaction(
+def test_deposit_creates_transaction(
     client,
     make_user,
     auth_headers,
@@ -115,6 +137,7 @@ def test_customer_cannot_create_transaction_on_another_customers_account(
         customer_a,
         auth_headers,
         account_id,
+        transaction_type="WITHDRAWAL",
     )
 
     assert response.status_code == 404

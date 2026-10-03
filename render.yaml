@@ -1,0 +1,32 @@
+# Render Blueprint: New + > Blueprint, point it at this repo.
+services:
+  - type: web
+    name: ai-banking-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    # Migrations run on every deploy, then the API starts. --proxy-headers makes rate limiting
+    # and audit logs see the real client IP behind Render's proxy.
+    startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips='*'
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.3
+      - key: ENVIRONMENT
+        value: production
+      - key: SECRET_KEY
+        generateValue: true          # long random value; the app refuses to start in production without one
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ai-banking-db
+          property: connectionString
+      - key: CORS_ORIGINS
+        value: https://your-frontend.example.com   # change to your real frontend origin(s), comma separated
+      - key: RISK_MODEL_PATH
+        value: app/ml/risk_model.pkl               # optional trained model; rule-based fallback if missing
+
+databases:
+  - name: ai-banking-db
+    plan: free
+    databaseName: banking
+    user: banking
