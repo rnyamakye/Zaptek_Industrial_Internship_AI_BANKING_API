@@ -12,6 +12,9 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
+from sqlalchemy.orm import Session
+from app.models.risk_assessment import RiskAssessment
+from app.models.enums import RiskLevel
 
 logger = logging.getLogger("ai_risk")
 
@@ -92,7 +95,8 @@ def load_model(model_path: str | None) -> RiskModel:
             logger.info("Loaded ML risk model version %s", model.version)
             return model
         except Exception:
-            logger.exception("Failed to load ML model, using rule-based fallback")
+            logger.exception(
+                "Failed to load ML model, using rule-based fallback")
     else:
         logger.warning("No ML model file found, using rule-based placeholder")
     return RuleBasedRiskModel()
@@ -144,7 +148,8 @@ class AIRiskService:
         try:
             score = self._validate_score(model.predict_score(features))
         except Exception:
-            logger.exception("Risk model failed, falling back to rule-based model")
+            logger.exception(
+                "Risk model failed, falling back to rule-based model")
             model = self._fallback
             score = self._validate_score(model.predict_score(features))
 
@@ -156,3 +161,32 @@ class AIRiskService:
         # Prediction logging (requirement): inputs, output, version.
         logger.info("risk_prediction features=%s result=%s", features, result)
         return result
+
+
+def save_assessment(
+    self,
+    db: Session,
+    customer_id: int,
+    transaction_id: int | None,
+    result: RiskResult,
+) -> RiskAssessment:
+    assessment = RiskAssessment(
+        customer_id=customer_id,
+        transaction_id=transaction_id,
+        risk_score=result.risk_score,
+        risk_level=RiskLevel(result.risk_level),
+        model_version=result.model_version,
+    )
+
+    db.add(assessment)
+    db.commit()
+    db.refresh(assessment)
+
+    logger.info(
+        "risk_assessment_saved id=%s customer_id=%s transaction_id=%s",
+        assessment.id,
+        customer_id,
+        transaction_id,
+    )
+
+    return assessment
