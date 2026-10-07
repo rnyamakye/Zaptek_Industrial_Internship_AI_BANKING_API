@@ -4,6 +4,16 @@ from sqlalchemy import String, ForeignKey, Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.database import Base
 from app.models.enums import VerificationStatus
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from app.models.risk_assessment import RiskAssessment
+    from app.models.user import User
+    from app.models.account import Account
+    from app.models.beneficiary import Beneficiary
+    from app.models.card import Card
+    from app.models.loan import LoanS
+
 
 class CustomerProfile(Base):
     __tablename__ = "customer_profiles"
@@ -22,7 +32,9 @@ class CustomerProfile(Base):
 
     user: Mapped["User"] = relationship(back_populates="profile")
     accounts: Mapped[list["Account"]] = relationship(back_populates="customer")
-    beneficiaries: Mapped[list["Beneficiary"]] = relationship(back_populates="customer")
+    beneficiaries: Mapped[list["Beneficiary"]
+                          ] = relationship(back_populates="customer")
     cards: Mapped[list["Card"]] = relationship(back_populates="customer")
     loans: Mapped[list["Loan"]] = relationship(back_populates="customer")
-    risk_assessments: Mapped[list["RiskAssessment"]] = relationship(back_populates="customer")
+    risk_assessments: Mapped[list["RiskAssessment"]
+                             ] = relationship(back_populates="customer")

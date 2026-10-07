@@ -5,7 +5,6 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
 from app.models.account import Account
 from app.models.risk_assessment import RiskAssessment
 from app.models.transaction import Transaction
@@ -17,12 +16,13 @@ from app.models.enums import (
     TransactionType,
 )
 from app.schemas.transaction import TransactionCreate
-from app.services.ai_risk_service import AIRiskService, load_model
+from app.services.ai_risk_service import AIRiskService
+from app.ai.model import get_model
 from app.services.notification_service import notify
 
 
 # Loads the trained model from RISK_MODEL_PATH if the file exists, otherwise the rule-based placeholder.
-risk_service = AIRiskService(load_model(get_settings().risk_model_path))
+risk_service = AIRiskService(get_model())
 
 
 class DuplicateReferenceError(ValueError):
@@ -67,7 +67,8 @@ def create_transaction(
             raise DuplicateReferenceError("Reference already used")
 
         if account.currency.upper() != data.currency.upper():
-            raise ValueError("Transaction currency does not match account currency")
+            raise ValueError(
+                "Transaction currency does not match account currency")
 
         amount = Decimal(data.amount)
 

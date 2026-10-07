@@ -2,6 +2,9 @@ from sqlalchemy import String, ForeignKey, UniqueConstraint, Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.database import Base
 from app.models.enums import BeneficiaryStatus
+from app.models.customer_profile import CustomerProfile
+from app.models.transfer import Transfer
+
 
 class Beneficiary(Base):
     __tablename__ = "beneficiaries"
@@ -18,8 +21,10 @@ class Beneficiary(Base):
         default=BeneficiaryStatus.ACTIVE,
     )
 
-    customer: Mapped["CustomerProfile"] = relationship(back_populates="beneficiaries")
-    transfers: Mapped[list["Transfer"]] = relationship(back_populates="beneficiary")
+    customer: Mapped["CustomerProfile"] = relationship(
+        back_populates="beneficiaries")
+    transfers: Mapped[list["Transfer"]] = relationship(
+        back_populates="beneficiary")
 
     __table_args__ = (
         UniqueConstraint(

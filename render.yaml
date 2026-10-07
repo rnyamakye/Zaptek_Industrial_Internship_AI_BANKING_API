@@ -15,15 +15,17 @@ services:
       - key: ENVIRONMENT
         value: production
       - key: SECRET_KEY
-        generateValue: true          # long random value; the app refuses to start in production without one
+        generateValue: true # long random value; the app refuses to start in production without one
       - key: DATABASE_URL
         fromDatabase:
           name: ai-banking-db
           property: connectionString
       - key: CORS_ORIGINS
-        value: https://your-frontend.example.com   # change to your real frontend origin(s), comma separated
+        value: https://your-frontend.example.com # change to your real frontend origin(s), comma separated
       - key: RISK_MODEL_PATH
-        value: app/ml/risk_model.pkl               # optional trained model; rule-based fallback if missing
+        value: app/ml/fraud_detection_model.pkl # trained model; rule-based fallback if missing
+      - key: RISK_MODEL_MODE
+        value: hybrid # hybrid = max(ML, rules); ml = ML score only
 
 databases:
   - name: ai-banking-db

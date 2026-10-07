@@ -1,5 +1,6 @@
 """Central configuration. All values come from environment variables (see .env.example)."""
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -32,14 +33,17 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000,http://localhost:5173"
 
     # AI risk model bundle (joblib). If the file is missing, the rule-based placeholder is used.
-    risk_model_path: str = "app/ml/risk_model.pkl"
+    risk_model_path: str = "app/ml/fraud_detection_model.pkl"
+    # "hybrid": final score = max(ML score, rule score). "ml": ML score alone (see README, AI risk model).
+    risk_model_mode: Literal["hybrid", "ml"] = "hybrid"
 
     @model_validator(mode="after")
     def _reject_weak_secret_in_production(self):
         if self.environment.lower() == "production" and (
             self.secret_key == DEFAULT_SECRET or len(self.secret_key) < 32
         ):
-            raise ValueError("SECRET_KEY must be set to a random string of 32+ characters in production")
+            raise ValueError(
+                "SECRET_KEY must be set to a random string of 32+ characters in production")
         return self
 
     @property

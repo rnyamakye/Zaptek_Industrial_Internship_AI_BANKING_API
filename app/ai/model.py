@@ -1,33 +1,12 @@
-from pathlib import Path
-import joblib
+
+from functools import lru_cache
+
+from app.core.config import get_settings
+from app.services.ai_risk_service import RiskModel, load_model
 
 
-MODEL_PATH = Path("app/models/risk_model.pkl")
-
-_model = None
-
-
-def load_model():
-    global _model
-
-    if _model is not None:
-        return _model
-
-    try:
-        if not MODEL_PATH.exists():
-            raise FileNotFoundError(
-                f"AI model not found at: {MODEL_PATH}"
-            )
-
-        _model = joblib.load(MODEL_PATH)
-
-        return _model
-
-    except Exception as exc:
-        raise RuntimeError(
-            f"Failed to load AI risk model: {exc}"
-        ) from exc
-
-
-def get_model():
-    return load_model()
+@lru_cache(maxsize=1)
+def get_model() -> RiskModel:
+    """Load once per process and reuse (loading is much slower than a prediction)."""
+    settings = get_settings()
+    return load_model(settings.risk_model_path, settings.risk_model_mode)
